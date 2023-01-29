@@ -1,0 +1,6 @@
+# Ignore Jupyter Notebook .ipynb_checkpoints directories
+.ipynb_checkpoints
+
+# Ignore __pycache__ directories
+__pycache__
+
