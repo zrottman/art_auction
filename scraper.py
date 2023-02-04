@@ -262,22 +262,24 @@ def login(driver, email=config.LOGIN_EMAIL, pw=config.LOGIN_PW):
 
 def search_artist(driver, artist_name, search_url):
     '''
-    Enters `artist_name` incrementally into search and selects once found.
+    Not currently implemented. Enters `artist_name` character-by-character
+    into search bar and clicks once the top search result matches `artist_name`.
 
-    Args:
-        artist_name (str): Name of artist to search
-        driver (obj): Selenium webdriver object
+    Parameters:
+        artist_name (str): The name of artist to search
+        driver (selenium.webdriver obj): Selenium webdriver object
 
     Returns:
         Bool: True if successfully found, False if there was an error
     '''
+    
     # Load search page
     driver.get(search_url)
     time.sleep(2)
 
     logging.info("\nSearching for {}".format(artist_name))
 
-    # Get elements
+    # Get HTML elements
     try:
         search_bar = driver.find_element(By.XPATH, config.SEARCH_BAR_XPATH)
         search_submit = driver.find_element(By.XPATH, config.SEARCH_SUBMIT_XPATH)
@@ -299,20 +301,21 @@ def search_artist(driver, artist_name, search_url):
             continue
 
         if first_result.text.lower() == artist_name.lower():
-            # Artist found
-            logging.info("{} found!".format(artist_name))
+
+            # Artist found, navigate to that page
             search_bar.send_keys(Keys.ARROW_DOWN)
             time.sleep(3)
             search_bar.send_keys(Keys.ENTER)
             time.sleep(3)
             search_submit.send_keys(Keys.ENTER)
             time.sleep(3)
-            # Modify URL to display only paintings and past auctions
+
+            # Get URL and modify
             current_url = driver.current_url
-            suffix = config.URL_SUFFIX 
-            modified_url = current_url[:current_url.find('?') + 1] + suffix
+            modified_url = current_url[:current_url.find('?') + 1] + config.URL_SUFFIX_SEARCH
             driver.get(modified_url)
             time.sleep(3)
+            
             return True
 
     return False
