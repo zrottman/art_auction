@@ -12,24 +12,40 @@ from math import ceil
 import os
 from unidecode import unidecode
 import config.scraper_config as config
+import logging
+
+logging.basicConfig(level=logging.INFO if config.VERBOSE else logging.WARNING)
 
 def extract_page_data(bsObj, artist_name):
     '''
-    Extract relevant data from page of auction results.
+    Extracts relevant information about artowkrs from a page of auction results.
 
-    Args:
-        bsObj (Beautiful Soup obj): page HTML
-        artist (str): Artist name to add to each row of data
+    Parameters:
+        bsObj (bs4.BeautifulSoup): The Beautiful Soup object containing the 
+            HTML of the page.
+        artist_name (str): The name of the artist to associate with the works 
+            of art.
 
     Returns:
-        page_out (arr): List of work details extracted from `bsObj`. Each list
-            item is a list of item details.
+        page_out (List[List[str]]): A list of lists, where each inner list
+            contains information about a single work of art.The information
+            includes:
+                - artist_name
+                - title
+                - date
+                - medium
+                - dims
+                - auction_date
+                - auction_house
+                - auction_sale
+                - auction_lot
+                - price_realized
+                - estimate
     '''
-
-    print("\tExtracting page data...")
 
     rows = bsObj.select(config.ROWS_CLASS)
     page_out = []
+
     for row in rows:
         work_data = {}
         work_data['artist_name'] = artist_name
@@ -132,39 +148,43 @@ def extract_page_data(bsObj, artist_name):
             work_data.get('estimate', ''),
             work_data.get('bought_in')
         ])
-    print("\tPage data extracted.")
 
     return page_out
 
 
 def load_cookies(driver, path=config.COOKIES_PATH):
     '''
-    Load cookies from `path` if file exists, otherwise create a new file.
-    Returns `cookies`
+    Loads cookies from path if file exists, otherwise creates a new file.
      
-    Args:
-        driver (obj): Selenium webdriver object
-        path (str): Path to file where cookies are stored
+    Parameters:
+        driver (selenium.webdriver obj): Selenium webdriver object
+        path (str): Path to file where cookies are stored in JSON format.
     '''
 
-    print("\nLoading cookies.")
-    try:
-        with open(path) as f:
-            cookies = json.load(f)
-    except FileNotFoundError:
-        # Cookies file does not exist
-        # create new cookies file
+    logging.info("\nLoading cookies.")
+
+    if not os.path.exists(path):
+        # Cookies file does not exist; create new cookies file
         cookies = []
         with open(path, 'w') as f:
             json.dump(cookies, f)
-    finally:
-        for cookie in cookies:
-            driver.add_cookie(cookie)
+    else:
+        with open(path) as f:
+            cookies = json.load(f)
+    
+    for cookie in cookies:
+        driver.add_cookie(cookie)
 
     return  
 
 
 def accept_cookies(driver):
+    '''
+    In the event of a prompt to accept cookies, click accept.
+
+    Parameters:
+        driver (selenium.webdriver obj): Selenium webdriver object
+    '''
 
     try:
         cookie_accept = driver.find_element(By.ID, config.ACCEPT_COOKIES_ID)
@@ -172,13 +192,20 @@ def accept_cookies(driver):
         # No pop-up
         return
     else:
-        print("Clicking to accept cookies\n")
+        logging.info("Clicking to accept cookies\n")
         cookie_accept.send_keys(Keys.ENTER)
         time.sleep(3)
         return
 
 
 def close_signup(driver):
+    '''
+    In the event of a prompt to sign up, close signup window.
+
+    Parameters:
+        driver (selenium.webdriver obj): Selenium webdriver object
+    '''
+
     # Close signup window if present
     try:
         close_signup = driver.find_element(By.XPATH, config.CLOSE_SIGNUP_XPATH) 
@@ -186,27 +213,33 @@ def close_signup(driver):
         # No pop-up
         return
     else:
-        print("Clicking to close signup pop-up.\n")
+        logging.info("Clicking to close signup pop-up.\n")
         close_signup.send_keys(Keys.ENTER)
         time.sleep(3)
         return
 
 
 def login(driver, email=config.LOGIN_EMAIL, pw=config.LOGIN_PW):
-    
-    # Check for Login button
+    '''
+    In the event that user is not logged in, automate login.
+
+    Parameters:
+        driver (selenium.webdriver obj): Selenium webdriver object
+        email (str, optional): The user's email (default is config.LOGIN_EMAIL.
+        pw (str, optional): The user's password (default is config.LOGIN_PW.
+    '''
+
+    # Check for presence of login button
     try:
         login_button = driver.find_element(By.XPATH, config.LOGIN_BUTTON_XPATH)
     except NoSuchElementException:
-        # Login button not found; user is logged in
-        # (Not necessarily true but presuming for now)
+        # Login button not found; user is (presumably) logged in
         return
     else:
         # Login
-
-        print("Attempting to log in")
         
         # Click Login button
+        logging.info("Attempting to log in")
         login_button.send_keys(Keys.ENTER)
         time.sleep(3)
 
@@ -215,14 +248,14 @@ def login(driver, email=config.LOGIN_EMAIL, pw=config.LOGIN_PW):
             user_email = driver.find_element(By.XPATH, config.USER_EMAIL_XPATH)
             user_pw = driver.find_element(By.XPATH, config.USER_PW_XPATH)
         except NoSuchElementException:
-            print("Email or password fields not found in login form.")
-            print("Closing driver.")
+            logging.warning("Email or password fields not found in login form.")
+            logging.warning("Closing driver.")
             driver.close()
             raise
         else:
             user_email.send_keys(email)
             user_pw.send_keys(pw + Keys.ENTER)
-            print("Logged in.\n")
+            logging.info("Logged in.\n")
             time.sleep(3)
             return
 
@@ -242,7 +275,7 @@ def search_artist(driver, artist_name, search_url):
     driver.get(search_url)
     time.sleep(2)
 
-    print("\nSearching for {}".format(artist_name))
+    logging.info("\nSearching for {}".format(artist_name))
 
     # Get elements
     try:
@@ -250,7 +283,7 @@ def search_artist(driver, artist_name, search_url):
         search_submit = driver.find_element(By.XPATH, config.SEARCH_SUBMIT_XPATH)
     except NoSuchElementException:
         # Search bar or search submit button not found
-        print("Search bar or submit button not found.")
+        logging.warning("Search bar or submit button not found.")
         driver.close()
         raise
 
@@ -267,7 +300,7 @@ def search_artist(driver, artist_name, search_url):
 
         if first_result.text.lower() == artist_name.lower():
             # Artist found
-            print("{} found!".format(artist_name))
+            logging.info("{} found!".format(artist_name))
             search_bar.send_keys(Keys.ARROW_DOWN)
             time.sleep(3)
             search_bar.send_keys(Keys.ENTER)
@@ -285,7 +318,7 @@ def search_artist(driver, artist_name, search_url):
     return False
 
 
-def crawl_artist(driver, wait, artist_name, output_file):
+def crawl_artist(driver, artist_name, output_file):
     '''
     Crawls through all pages of a given artist.
 
@@ -298,13 +331,12 @@ def crawl_artist(driver, wait, artist_name, output_file):
         bool: True when complete
     '''
 
-    print("\nCrawing: {}".format(artist_name))
+    logging.info("\nCrawing: {}".format(artist_name))
     cur_page = 1
     parser = 'lxml'
     artist_data = []
 
     # Wait until page load
-    print("Waiting for artist page to load")
     time.sleep(5)
 
     # Get number of pages
@@ -319,7 +351,7 @@ def crawl_artist(driver, wait, artist_name, output_file):
     # Loop until no more pages
     while cur_page <= max_pages:
         
-        print("\n\nPage {}/{} loaded".format(cur_page, max_pages))
+        logging.info("\tPage {}/{} loaded".format(cur_page, max_pages))
 
         # Get HTML and extract info
         page_source = driver.page_source
@@ -353,10 +385,10 @@ def crawl_artist(driver, wait, artist_name, output_file):
             # This is the last page
             break
 
-    print("\n\nArtist complete.")
+    logging.info("\nArtist complete.")
 
     # Write results to file
-    print("Writing results to file.")
+    logging.info("Writing results to file.")
 
     with open(output_file, 'a', newline='') as f:
         write = csv.writer(f, quoting=csv.QUOTE_NONNUMERIC)
@@ -365,18 +397,18 @@ def crawl_artist(driver, wait, artist_name, output_file):
 
 def crawl(output_file, artists, start_url=config.START_URL):
     '''
-    Main crawling script.
+    Crawl a website to scrape auction information about artists.
 
-    Args:
-        start_url (str, optional): initial url
-        output_file (str, optional): output file path
-        artists (list, optional): list of artists to search
+    Parameters:
+        output_file (str): Path to the output file where the scraped data
+            will be stored.
+        artists (list): List of artists to search for information.
+        start_url (str, optional): The initial URL to start the crawl
+            (default is config.START_URL)
 
+    Returns:
+        list: A names of artists that were not found during the crawl.
     '''
-    # Initialize webdriver instance
-    driver = webdriver.Safari()
-    driver.set_window_size(1000, 2000)
-    wait = WebDriverWait(driver, 10)
 
     # Initialize output variables
     headings = [
@@ -386,12 +418,16 @@ def crawl(output_file, artists, start_url=config.START_URL):
     ]
     not_found = []
     
-    # Initialize output file if it doesn't already exist
+    # Create output file if it doesn't already exist
     if not os.path.exists(output_file):
         with open(output_file, 'w', newline='') as f:
             write = csv.writer(f, quoting=csv.QUOTE_NONNUMERIC)
             write.writerow(headings)
 
+    # Initialize webdriver instance
+    driver = webdriver.Safari()
+    driver.set_window_size(1000, 2000)
+    
     # Load cookies
     load_cookies(driver, config.COOKIES_PATH)
 
@@ -411,59 +447,71 @@ def crawl(output_file, artists, start_url=config.START_URL):
     # Scrape loop
     for artist in artists:
         
+        # Resolve non-standard characters in artist name
         artist_name = unidecode(artist)
 
-        # Fetch URL
+        # Build artist URL
         url = (
             config.URL_PREFIX +
             artist_name.lower().replace(' ', '-') +
             config.URL_SUFFIX
         )
+
         # Check for validity of URL
         try:
             response = requests.get(url)
         except requests.exceptions.TooManyRedirects:
             not_found.append(artist)
+        except requests.exceptions.HTTPError:
+            not_found.append(artist)
         else:
-            if response.status_code == 404:
-                not_found.append(artist)
-            else:
-                driver.get(url)
-                crawl_artist(driver, wait, artist_name, output_file)
-        
+            driver.get(url)
+            crawl_artist(driver, artist_name, output_file)
 
     # Write cookies to file
-    print("Writing cookies to file.")
+    logging.info("Writing cookies to file.")
     cookies = driver.get_cookies()
     with open(config.COOKIES_PATH, 'w') as f:
         json.dump(cookies, f)
 
-    print("\nThe following artists were not found:")
-    for artist in not_found:
-        print("-{}".format(artist))
-    
     # Close driver
-    print("Closing driver.\n")
+    logging.info("Closing driver.\n")
     driver.close()
+
+    return not_found
 
 
 def load_artists(path):
     '''
-    Read in artist file.
+    Loads the list of artist names from a text file. Each artist name should
+    have its own line in the file.
 
-    Args:
-        path (str): file path
+    Parameters:
+        path (str): The file path tot he text file containing the list of 
+            artist names.
 
     Returns:
-        arr: List of artist names
+        List: A list of artist names.
     '''
+    
+    # Open the text file in read mode and read contents
     with open(path, newline='') as f:
+        # Split the contents into a list of artist names by splitting on newlines
         artists = f.read().splitlines()
+    
+    # Return the list of artist names
     return artists
 
 
 if __name__ == '__main__':
 
+    # Load artist names
     artists = load_artists(config.ARTIST_PATH)
+    
+    # Crawl
+    not_found = crawl(artists=artists[53:55], output_file=config.OUTPUT_FILE)
 
-    crawl(artists=artists[53:55], output_file=config.OUTPUT_FILE)
+    # Print nmes of artists not found
+    print("The following artists were not found:")
+    for artist in not_found:
+        print("\t-{}".format(artist))
